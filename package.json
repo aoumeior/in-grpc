@@ -9,9 +9,13 @@
     "async": "^1.5.2",
     "google-protobuf": "^3.0.0",
     "grpc": "^1.11.0",
+    "grpc-promise": "^1.4.0",
     "lodash": "^4.6.1",
+    "log4js": "^6.3.0",
     "minimist": "^1.2.0",
-    "redis": "^3.0.2"
+    "redis": "^3.0.2",
+    "redis-connection-pool": "^1.7.2",
+    "typed-promisify": "^0.4.0"
   },
   "devDependencies": {
     "@types/redis": "^2.8.25"
@@ -19,7 +23,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "ts-node src/index.ts",
-    "client": "ts-node src/client.ts"
+    "client": "ts-node src/client.ts",
+    "test1": "node src/test.js"
   },
   "keywords": [
     "grpc"

@@ -1,64 +1,158 @@
 import * as redis from 'redis';
-import { promisify } from "util";
-
-
 import * as grpc from 'grpc';
 import { RedisClient } from 'redis';
-
-
-var PROTO_PATH = __dirname + '/../protos/helloworld.proto';
-
-
+import { EventEmitter } from 'events';
 import * as  protoLoader from '@grpc/proto-loader';
 
-var packageDefinition = protoLoader.loadSync(
-    PROTO_PATH, {
-    keepCase: true,
-    longs: String,
-    enums: String,
-    defaults: false,
-    oneofs: true
-});
-var hello_proto = grpc.loadPackageDefinition(packageDefinition).helloworld;
+import { Register, Request, RequestType, logger } from './option';
+import * as times from "timers";
 
-// 指定地址和端口号
-var client = new hello_proto['Greeter']('localhost:50055',
-    grpc.credentials.createInsecure());
-var user = 'world';
 
-// client.sayHello(call,callback)
-client.sayHello({
-    name: user,
-    age: 'no'
-}, function (err: any, response: any) {
-    // callback的 err 是server 来返回的 如果无 null 说明无错误
-    if (err === null) {
-        // 说明server端没有出现错误 (两段式请求,只能通过 err 来判断)
+export namespace Client {
+
+    export enum MessageType {
+        Person = "PersonMessage",
+        Group = "GropMessage",
+        Other = "Other"
     }
-    // server端给返回的数据 response 和 HelloReply 定义的一样
-    console.log('Greeting:', response);
-});
 
-interface Register {
-    port: number;
-    host: string;
-    certificate: string;
+    const PROTO_PATH = __dirname + '/../protos/Onlion.proto';
+
+
+
+    const packageDefinition = protoLoader.loadSync(
+        PROTO_PATH, {
+        keepCase: true,
+        longs: String,
+        enums: String,
+        defaults: false,
+        oneofs: true
+    });
+    const Onlion = grpc.loadPackageDefinition(packageDefinition).Onlion;
+
+
+    let redisClient: RedisClient;
+    let redisClient1: RedisClient;
+
+    class MyEmitter extends EventEmitter { }
+
+
+    const myEmitter = new MyEmitter();
+
+    myEmitter.on("Main", function () {
+        const error = new Error();
+        console.log("The listening method for the message must be respecified");
+        console.log(error.stack);
+    });
+
+    myEmitter.on("Startup", function (channel: string, client) {
+        myEmitter.on("Message", function (message: string) {
+            // const error = new Error();
+            // console.log("The listening method for the message must be respecified");
+            // console.log(error.stack);
+        });
+
+        myEmitter.on('insert', function (key: string, value: string): void {
+            redisClient1.set(key, value);
+        });
+
+        myEmitter.on('insertALl', function (all: { key: string; value: string; }[]): void {
+            for (const onece of all) {
+                redisClient1.set(onece.key, onece.value);
+            }
+        });
+
+        myEmitter.on('PersonMessage', function (id: string | number, ...args: string[]) {
+            redisClient1["xadd"](id.toString(), "*", ...args, function (err: any, reply: string) {
+                if (err) {
+                    return console.error(err);
+                }
+                client.Publish({ status: 1, type: RequestType.transmit, data: id.toString() + reply } as Request,
+                    async function (_error: any, response: Register) { console.log(response); });
+            });
+        });
+
+        myEmitter.on('GropMessage', function (id: string | number, users: Array<string | number>, ...args: { key: string; value: string; }[]) {
+            redisClient1["xadd"](id.toString(), ...args, function (err: any, reply: string) {
+                if (err) {
+                    return console.error(err);
+                }
+
+                for (const user of users) {
+                    redisClient1["xgroup"]('CREATE', id.toString(), user.toString(), '0-0', function (err: any, reply: string) {
+                        if (err) {
+                            return console.error(err);
+                        }
+                        console.log(reply);
+                    });
+                }
+            });
+        });
+
+        myEmitter.emit("Main");
+    });
+
+    export function insert(key: string, value: string): void {
+        redisClient1.set(key, value);
+    }
+
+    export function insertAll(all: { key: string; value: string; }[]): void {
+        for (const onece of all) {
+            redisClient1.set(onece.key, onece.value);
+        }
+    }
+
+    export function notic(id: string | number, messageType: MessageType, message: string) {
+        myEmitter.emit(messageType, id.toString(), "message", message);
+    }
+
+    export async function start(): Promise<void> {
+        const client = new Onlion['Listion']('localhost:50055', grpc.credentials.createInsecure());
+
+        const request = { status: 1 } as Request;
+
+        client.Register(request, function (_error: any, response: Register) {
+
+            redisClient = redis.createClient(response.port, response.host, { password: response.certificate });
+            redisClient1 = redis.createClient(response.port, response.host, { password: response.certificate });
+            redisClient.on("error", function (error) {
+                console.error(error);
+            });
+
+            redisClient.on("subscribe", function (channel, count) {
+                logger.log('监听到订阅事件', channel, count);
+                myEmitter.emit("Message", count);
+            });
+            //在pub的时候会触发 message事件，我们的所有业务处理基本就是靠监听它了
+            redisClient.on("message", function (channel, message) {
+                logger.log('监听到发布事件');
+                logger.log("sub channel " + channel + ": " + message);
+                myEmitter.emit("Message", message);
+            });
+            redisClient.on('ready', function () {
+                redisClient.incr('did a thing');
+                redisClient.subscribe(response.channel);
+                client.Notic(request, function (error: any, cool: any) {
+                    myEmitter.emit("Startup", response.channel, client);
+                });
+            });
+        });
+    }
+
+    const _message: { "id": string, "messagetype": Client.MessageType, message: string, [name: string]: string; }[] = new Array();
+    export const push = _message.push.bind(_message);
+
+    export const on = myEmitter.on.bind(myEmitter);
+    Client.on("Main", function () {
+        let timer = times.setInterval(function () {
+            try {
+                const m = _message.pop();
+                if (m !== undefined) {
+                    Client.notic(m.id, m.messagetype, m.message);
+                }
+            } catch (e) {
+                timer = timer.refresh();
+            };
+        }, 10);
+    });
 }
-
-const client1 = new hello_proto['Listion']('localhost:50055',
-    grpc.credentials.createInsecure());
-
-const certificate = { port: 6379, host: "localhost" } as Register;
-
-let redisClient: RedisClient;
-
-client1.Onlion(certificate, function (_error: any, response: any) {
-
-    redisClient = redis.createClient(certificate.port, certificate.host, { password: certificate.certificate });
-
-    console.log('Listion', response);
-    grpc.closeClient(client);
-    grpc.closeClient(client1);
-    console.log(client);
-});
-

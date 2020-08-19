@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package Onlion;
+
+service Listion {
+    rpc Register (Request) returns (RegisterInfo) {}
+    rpc Notic (Request) returns(Request) {}
+    rpc Publish (Request) returns(Request) {}
+}
+
+message RegisterInfo {
+    int32 port = 1;
+    string host = 2;
+    string certificate = 3;
+    string channel = 4;
+}
+
+message Request {
+    int32 status = 1;
+
+    enum RequestType 
+    {
+        ACK = 0;
+        transmit = 1;
+    }
+    optional RequestType type = 2 [default = ACK];
+    optional string data = 3; 
+}
