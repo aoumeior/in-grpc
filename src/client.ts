@@ -39,12 +39,6 @@ export namespace Client {
 
     const myEmitter = new MyEmitter();
 
-    myEmitter.on("Main", function () {
-        const error = new Error();
-        console.log("The listening method for the message must be respecified");
-        console.log(error.stack);
-    });
-
     myEmitter.on("Startup", function (channel: string, client) {
         myEmitter.on("Message", function (message: string) {
             // const error = new Error();
@@ -152,7 +146,7 @@ export namespace Client {
                 }
             } catch (e) {
                 timer = timer.refresh();
-            };
+            }
         }, 10);
     });
 }

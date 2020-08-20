@@ -14,7 +14,6 @@ const packageDefinition = protoLoader.loadSync(
     oneofs: true
 });
 
-
 const Onlion = grpc.loadPackageDefinition(packageDefinition).Onlion;
 const certificate = { port: 6379, host: "localhost", channel: "cc in grpc" } as Register;
 const RedisClient = redis.createClient(certificate.port, certificate.host, { password: certificate.certificate });
@@ -39,7 +38,7 @@ const server = new grpc.Server();
 server.addService(Onlion["Listion"].service, {
     Register: onlion,
     Notic: notic,
-    Publish: publish
+    Publish: publish,
 });
 
 server.bind('0.0.0.0:50055', grpc.ServerCredentials.createInsecure());
